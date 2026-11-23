@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Events · Alertmux</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/events.js"></script>
+</head>
+<body>
+  <main>
+    <div class="row">
+      <h1>Events</h1>
+      <span class="spacer"></span>
+      <label class="inline"><input type="checkbox" id="live" checked> Live</label>
+    </div>
+    <p class="muted">System log: SMTP listener, sign-ins, settings changes, delivery retries and failures.</p>
+    <form id="filters" class="row filters card" role="search">
+      <input type="search" name="q" placeholder="Search…" aria-label="Search">
+      <select name="level" aria-label="Level">
+        <option value="">All levels</option><option>info</option><option>warn</option><option>error</option>
+      </select>
+      <button type="reset" class="small">Clear</button>
+    </form>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Time</th><th>Level</th><th>Type</th><th>Message</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="empty" class="empty hidden">No events.</div>
+    </div>
+    <p class="row"><button id="older" type="button" class="hidden">Load older</button></p>
+  </main>
+</body>
+</html>

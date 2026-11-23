@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Destinations · Alertmux</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/destinations.js"></script>
+</head>
+<body>
+  <main>
+    <div class="row">
+      <h1>Destinations</h1>
+      <span class="spacer"></span>
+      <details class="menu" id="add-menu">
+        <summary class="btn primary">Add destination ▾</summary>
+        <div class="menu-list" id="add-list" role="menu"></div>
+      </details>
+    </div>
+    <p class="muted">Where accepted mail is delivered. Credentials are encrypted at rest and never shown again after saving.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Name</th><th>Type</th><th>Details</th><th>Status</th><th></th></tr></thead>
+        <tbody id="dest-rows"></tbody>
+      </table>
+      <div id="dest-empty" class="empty hidden">No destinations yet.</div>
+    </div>
+
+    <h1 class="mt">Routing</h1>
+    <form id="routing">
+      <div class="card">
+        <label for="default-dest">Default destination</label>
+        <select id="default-dest" name="defaultDestinationId"></select>
+        <div class="hint">Used when no rule below matches.</div>
+      </div>
+      <div class="card">
+        <div class="row"><h2>Rules</h2><span class="spacer"></span><button type="button" id="add-rule" class="small">Add rule</button></div>
+        <p class="hint">Rules are checked top to bottom. A rule matches when every filled-in condition matches (any value in a list).
+          Every matching rule's destinations get a copy, until a rule with “Stop here” matches.</p>
+        <div id="rules"></div>
+        <div id="routing-error" class="hidden"></div>
+        <div class="row end"><button type="submit" class="primary">Save routing</button></div>
+      </div>
+    </form>
+  </main>
+
+  <dialog id="edit" aria-labelledby="edit-title">
+    <form id="dest-form" method="dialog">
+      <header>
+        <h2 id="edit-title">Destination</h2>
+        <button type="button" class="small" data-close aria-label="Close">✕</button>
+      </header>
+      <div class="body">
+        <input type="hidden" name="kind">
+        <label for="d-name">Name</label>
+        <input type="text" id="d-name" name="name" required maxlength="100">
+        <p><label class="inline"><input type="checkbox" name="enabled" checked> Enabled</label></p>
+
+        <!-- Microsoft Graph -->
+        <div data-when="kind=microsoft-graph">
+          <label for="d-cloud">Microsoft cloud</label>
+          <select id="d-cloud" name="config.cloud"></select>
+          <div class="hint">GCC (moderate) tenants use the Commercial endpoints. GCC High and DoD use the .us endpoints.</div>
+          <div data-when="config.cloud=custom">
+            <label for="d-auth-url">Authority URL</label>
+            <input type="text" id="d-auth-url" name="config.authorityUrl" placeholder="https://login.microsoftonline.com">
+            <label for="d-graph-url">Graph URL</label>
+            <input type="text" id="d-graph-url" name="config.graphUrl" placeholder="https://graph.microsoft.com">
+          </div>
+          <div class="hint" id="cloud-endpoints"></div>
+          <label for="d-tenant">Directory (tenant) ID</label>
+          <input type="text" id="d-tenant" name="config.tenantId" placeholder="00000000-0000-0000-0000-000000000000 or contoso.onmicrosoft.com">
+          <label for="d-client">Application (client) ID</label>
+          <input type="text" id="d-client" name="config.clientId">
+          <label>Credential</label>
+          <div class="checks">
+            <label class="inline"><input type="radio" name="config.authMethod" value="secret" checked> Client secret</label>
+            <label class="inline"><input type="radio" name="config.authMethod" value="certificate"> Certificate</label>
+          </div>
+          <div data-when="config.authMethod=secret">
+            <label for="d-secret">Client secret</label>
+            <input type="password" id="d-secret" name="secrets.clientSecret" autocomplete="new-password" data-secret>
+          </div>
+          <div data-when="config.authMethod=certificate">
+            <label for="d-cert">Certificate (PEM)</label>
+            <textarea id="d-cert" name="secrets.certificatePem" data-secret placeholder="-----BEGIN CERTIFICATE-----"></textarea>
+            <label for="d-key">Private key (PEM, unencrypted)</label>
+            <textarea id="d-key" name="secrets.privateKeyPem" data-secret placeholder="-----BEGIN PRIVATE KEY-----"></textarea>
+          </div>
+          <div class="callout">The app needs the <strong>Mail.Send</strong> application permission with admin consent.
+            Restrict which mailboxes it can send as with Exchange RBAC for Applications. See <code>docs/entra.md</code>.</div>
+        </div>
+
+        <!-- Google -->
+        <div data-when="kind=google-smtp">
+          <label for="d-mode">Mode</label>
+          <select id="d-mode" name="config.mode">
+            <option value="relay">SMTP relay service (smtp-relay.gmail.com)</option>
+            <option value="xoauth2">OAuth2 with service account (smtp.gmail.com, XOAUTH2)</option>
+          </select>
+          <div class="row">
+            <div class="spacer"><label for="d-host">Host</label><input type="text" id="d-host" name="config.host"></div>
+            <div><label for="d-port">Port</label><input type="number" id="d-port" name="config.port" min="1" max="65535"></div>
+          </div>
+          <label for="d-sec">Connection security</label>
+          <select id="d-sec" name="config.security">
+            <option value="starttls">STARTTLS (587)</option>
+            <option value="tls">TLS (465)</option>
+            <option value="none">None (testing only)</option>
+          </select>
+          <label for="d-ehlo">EHLO name</label>
+          <input type="text" id="d-ehlo" name="config.ehloName" placeholder="relay.example.com">
+          <div class="hint">Google's relay rejects generic names like “localhost”. Use a hostname in your domain.</div>
+
+          <div data-when="config.mode=relay">
+            <label for="d-relayauth">Relay authentication</label>
+            <select id="d-relayauth" name="config.relayAuth">
+              <option value="password">SMTP AUTH (Workspace user + app password)</option>
+              <option value="ip">IP allowlist only</option>
+            </select>
+            <div data-when="config.relayAuth=ip" class="callout warn">Only works when this relay has a static public egress IP that is
+              allowlisted in Admin console › Apps › Gmail › Routing › SMTP relay service. Serverless and container platforms usually share egress IPs.</div>
+            <div data-when="config.relayAuth=password">
+              <label for="d-user">Username</label>
+              <input type="text" id="d-user" name="config.username" placeholder="relay@example.com">
+              <label for="d-pass">App password</label>
+              <input type="password" id="d-pass" name="secrets.password" autocomplete="new-password" data-secret>
+            </div>
+          </div>
+          <div data-when="config.mode=xoauth2">
+            <label for="d-sa">Service account JSON key</label>
+            <textarea id="d-sa" name="secrets.serviceAccountJson" data-secret placeholder='{"type": "service_account", ...}'></textarea>
+            <div class="hint">Needs domain-wide delegation for scope <code>https://mail.google.com/</code>. Mail is sent as the envelope (or fixed) sender. See <code>docs/google.md</code>.</div>
+          </div>
+        </div>
+
+        <!-- Microsoft Teams -->
+        <div data-when="kind=teams-webhook">
+          <label for="d-teams-url">Workflows webhook URL</label>
+          <input type="text" id="d-teams-url" name="secrets.webhookUrl" autocomplete="off" spellcheck="false" autocapitalize="off" data-1p-ignore data-lpignore="true" data-bwignore data-form-type="other" data-secret placeholder="https://….logic.azure.com/workflows/… or https://….powerplatform.com/…">
+          <div class="hint">In the Teams channel: ••• › Workflows › “Post to a channel when a webhook request is received”, then copy the URL.
+            Anyone with this URL can post to the channel, so it's stored like a password. See <code>docs/teams-slack.md</code>.</div>
+        </div>
+
+        <!-- Slack -->
+        <div data-when="kind=slack">
+          <label>Connect with</label>
+          <div class="checks">
+            <label class="inline"><input type="radio" name="config.method" value="webhook" checked> Incoming webhook</label>
+            <label class="inline"><input type="radio" name="config.method" value="bot"> Bot token</label>
+          </div>
+          <div data-when="config.method=webhook">
+            <label for="d-slack-url">Incoming webhook URL</label>
+            <input type="password" id="d-slack-url" name="secrets.webhookUrl" autocomplete="off" data-secret placeholder="https://hooks.slack.com/services/…">
+            <div class="hint">One webhook posts to one channel, chosen when the webhook is created in your Slack app.</div>
+          </div>
+          <div data-when="config.method=bot">
+            <label for="d-slack-api">Slack workspace type</label>
+            <select id="d-slack-api" name="config.apiBaseUrl"></select>
+            <label for="d-slack-token">Bot token</label>
+            <input type="password" id="d-slack-token" name="secrets.botToken" autocomplete="off" data-secret placeholder="xoxb-…">
+            <div class="hint">Needs the <code>chat:write</code> scope, and the bot must be invited to the channel (<code>/invite @YourBot</code>).</div>
+            <label for="d-slack-channel">Channel</label>
+            <input type="text" id="d-slack-channel" name="config.channel" placeholder="C0123ABCDEF or #alerts">
+          </div>
+        </div>
+
+        <!-- shared by chat destinations -->
+        <div data-when="kind=teams-webhook|slack">
+          <p><label class="inline"><input type="checkbox" name="config.includeBody" checked> Include the message body</label></p>
+          <label for="d-maxbody">Max body length (characters)</label>
+          <input type="number" id="d-maxbody" name="config.maxBodyChars" min="0" max="10000">
+          <div class="hint">Posts the sender, subject, a short preview and attachment names. The readable text (HTML converted to text,
+            up to this length) is shown in full on Slack and behind <em>Show full message</em> on Teams. Attachments themselves are not uploaded.</div>
+        </div>
+
+        <div id="dest-error" class="hidden"></div>
+        <div class="row end mt">
+          <button type="button" data-close>Cancel</button>
+          <button type="submit" class="primary" value="save">Save</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="test" aria-labelledby="test-title">
+    <form id="test-form" method="dialog">
+      <header><h2 id="test-title">Test connection</h2><button type="button" class="small" data-close aria-label="Close">✕</button></header>
+      <div class="body">
+        <div id="test-addr-box">
+          <label for="t-addr">Mailbox address (optional for Microsoft, required for Google XOAUTH2)</label>
+          <input type="email" id="t-addr" name="address" placeholder="sender@example.com">
+        </div>
+        <p id="test-chat-note" class="hint hidden">Posts a visible test message to the channel.</p>
+        <div id="test-result" class="hidden"></div>
+        <div class="row end mt"><button type="submit" class="primary">Run test</button></div>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

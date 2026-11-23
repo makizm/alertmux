@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · Alertmux</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/login.js"></script>
+</head>
+<body class="login">
+  <main>
+    <form class="card" id="login">
+      <div class="login-brand"><img src="/logo.svg" alt="" width="56" height="56"><h1>Alertmux</h1></div>
+      <label for="password">Admin password</label>
+      <input type="password" id="password" name="password" autocomplete="current-password" required autofocus>
+      <div id="error" class="callout err hidden" role="alert"></div>
+      <p><button class="primary" type="submit">Sign in</button></p>
+    </form>
+  </main>
+</body>
+</html>

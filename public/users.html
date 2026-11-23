@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Relay users · Alertmux</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/users.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Relay users</h1>
+    <p class="muted">Credentials devices use for SMTP AUTH (PLAIN/LOGIN) against this relay. These are local to the relay, not Microsoft or Google accounts.
+      AUTH is optional unless “Require SMTP AUTH” is on in Settings.</p>
+    <div class="callout warn">TLS is not enabled yet, so these passwords cross the network in clear text. Use unique passwords that aren't used anywhere else.</div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Username</th><th>Note</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div id="empty" class="empty hidden">No relay users.</div>
+    </div>
+
+    <form id="add" class="card mt">
+      <h2>Add user</h2>
+      <label for="u-name">Username</label>
+      <input type="text" id="u-name" name="username" required autocomplete="off">
+      <label for="u-pass">Password</label>
+      <div class="row">
+        <input type="text" id="u-pass" name="password" required minlength="12" autocomplete="off">
+        <button type="button" id="gen" class="small">Generate</button>
+      </div>
+      <div class="hint">At least 12 characters. Copy it now: it is stored hashed and can't be shown again.</div>
+      <label for="u-note">Note</label>
+      <input type="text" id="u-note" name="note" placeholder="e.g. 2nd floor printer">
+      <div id="error" class="hidden"></div>
+      <div class="row end"><button type="submit" class="primary">Add user</button></div>
+    </form>
+  </main>
+</body>
+</html>

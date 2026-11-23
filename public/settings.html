@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings · Alertmux</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/settings.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Settings</h1>
+    <form id="settings">
+      <fieldset>
+        <legend>SMTP listener</legend>
+        <p><label class="inline"><input type="checkbox" name="smtp.enabled"> Accept SMTP connections</label></p>
+        <label for="s-port">Port</label>
+        <input type="number" id="s-port" name="smtp.port" min="1" max="65535">
+        <div class="hint">25 is standard for relays. Inside Docker, map the host port to this one. Changes restart the listener immediately.</div>
+        <label for="s-bind">Bind address</label>
+        <input type="text" id="s-bind" name="smtp.bindAddress">
+        <label for="s-host">Hostname</label>
+        <input type="text" id="s-host" name="smtp.hostname">
+        <div class="hint">Shown in the SMTP greeting and added to the Received header.</div>
+        <label for="s-nets">Allowed client networks</label>
+        <textarea id="s-nets" name="smtp.allowedNetworks" data-type="list" placeholder="One per line, e.g. 192.168.1.0/24"></textarea>
+        <div class="hint">CIDR ranges or single IPs, one per line. Leave empty to accept any address. Only do that together with “Require SMTP AUTH”.</div>
+        <p><label class="inline"><input type="checkbox" name="smtp.requireAuth" id="s-auth"> Require SMTP AUTH (relay users)</label></p>
+        <div id="auth-warn" class="callout warn hidden">TLS is not enabled yet, so SMTP AUTH passwords are sent in clear text. Use it only on trusted networks or a private link.</div>
+        <div id="open-warn" class="callout err hidden">Empty network list without SMTP AUTH makes this an open relay. Anyone who can reach the port can send mail as your users.</div>
+        <p><label class="inline"><input type="checkbox" name="smtp.proxyProtocol"> Expect PROXY protocol header</label></p>
+        <div class="hint">Enable only behind a load balancer that sends PROXY protocol (e.g. AWS NLB, Cloudflare Spectrum), so the real client IP is used for the allowlist.</div>
+        <label for="s-size">Max message size (MB)</label>
+        <input type="number" id="s-size" name="smtp.maxMessageMb" min="1" max="150">
+        <div class="hint">Microsoft Graph accepts at most ~3 MB per message and Google 25 MB. Larger messages are refused per destination.</div>
+        <label for="s-rcpt">Max recipients per message</label>
+        <input type="number" id="s-rcpt" name="smtp.maxRecipients" min="1" max="1000">
+      </fieldset>
+
+      <fieldset>
+        <legend>Sender</legend>
+        <label>Send as</label>
+        <div class="checks">
+          <label class="inline"><input type="radio" name="sender.mode" value="envelope"> The device's MAIL FROM address</label>
+          <label class="inline"><input type="radio" name="sender.mode" value="fixed"> Always one mailbox</label>
+        </div>
+        <div class="hint">With Microsoft Graph the sender must be a real mailbox the app is allowed to send as.</div>
+        <div id="fixed-box">
+          <label for="s-fixed">Fixed sender mailbox</label>
+          <input type="email" id="s-fixed" name="sender.fixedAddress" placeholder="noreply@example.com">
+          <p><label class="inline"><input type="checkbox" name="sender.rewriteFrom"> Rewrite the From header to this mailbox (original goes to Reply-To)</label></p>
+        </div>
+        <label for="s-allowed">Allowed MAIL FROM</label>
+        <textarea id="s-allowed" name="sender.allowed" data-type="list" placeholder="scanner@example.com&#10;@example.com"></textarea>
+        <div class="hint">Full addresses or <code>@domain</code>, one per line. Empty = any sender.</div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Delivery &amp; retries</legend>
+        <label for="s-att">Max attempts</label>
+        <input type="number" id="s-att" name="delivery.maxAttempts" min="1" max="100">
+        <label for="s-base">First retry after (seconds)</label>
+        <input type="number" id="s-base" name="delivery.retryBaseSeconds" min="1">
+        <div class="hint">Doubles after each failure, up to the maximum below. Microsoft's Retry-After is honored when given.</div>
+        <label for="s-max">Longest retry delay (seconds)</label>
+        <input type="number" id="s-max" name="delivery.retryMaxSeconds" min="1">
+        <label for="s-conc">Parallel deliveries</label>
+        <input type="number" id="s-conc" name="delivery.concurrency" min="1" max="32">
+      </fieldset>
+
+      <fieldset>
+        <legend>Retention</legend>
+        <label for="s-rm">Keep message log (days)</label>
+        <input type="number" id="s-rm" name="retention.messagesDays" min="1">
+        <label for="s-re">Keep events (days)</label>
+        <input type="number" id="s-re" name="retention.eventsDays" min="1">
+        <p><label class="inline"><input type="checkbox" name="retention.deleteBodiesAfterSend"> Delete message contents once delivered (keep only the log entry)</label></p>
+      </fieldset>
+
+      <div id="error" class="hidden"></div>
+      <div class="row end"><button type="submit" class="primary">Save settings</button></div>
+    </form>
+  </main>
+</body>
+</html>

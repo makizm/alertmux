@@ -1,0 +1,9 @@
+node_modules/
+data/
+.env
+
+# Local Cloudflare experiments, not part of the published project
+poc/
+
+# Local editor/assistant settings
+.claude/

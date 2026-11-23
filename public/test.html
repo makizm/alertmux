@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Test send · Alertmux</title>
+  <link rel="icon" href="/favicon.svg">
+  <link rel="stylesheet" href="/app.css">
+  <script type="module" src="/test.js"></script>
+</head>
+<body>
+  <main>
+    <h1>Test send</h1>
+    <p class="muted">Sends a plain-text message through the same pipeline as SMTP clients: sender policy, routing, queue and delivery.</p>
+    <form id="send" class="card">
+      <label for="t-from">From (MAIL FROM)</label>
+      <input type="email" id="t-from" name="from" required>
+      <label for="t-to">To</label>
+      <input type="text" id="t-to" name="to" required placeholder="someone@example.com, other@example.com">
+      <label for="t-subj">Subject</label>
+      <input type="text" id="t-subj" name="subject" value="Alertmux test">
+      <label for="t-text">Body</label>
+      <textarea id="t-text" name="text">This is a test message sent from the Alertmux admin UI.</textarea>
+      <div id="result" class="hidden"></div>
+      <div class="row end"><button type="submit" class="primary">Send</button></div>
+    </form>
+  </main>
+</body>
+</html>

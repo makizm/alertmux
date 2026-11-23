@@ -1,0 +1,27 @@
+{
+  "name": "alertmux",
+  "version": "0.1.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "description": "Alertmux: an SMTP relay that routes device alerts and delivers via Microsoft Graph and Google Workspace using OAuth2, with a minimal admin web UI.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "dev": "node --watch src/main.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/"
+  },
+  "dependencies": {
+    "nodemailer": "^10.6.0",
+    "smtp-server": "^3.21.6"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/nodemailer": "^8.0.2",
+    "@types/smtp-server": "^3.5.13",
+    "typescript": "^7.0.2"
+  }
+}
