@@ -12,7 +12,7 @@
     "start": "node src/main.ts",
     "dev": "node --watch src/main.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --test test/"
+    "test": "node --test \"test/**/*.test.ts\""
   },
   "dependencies": {
     "nodemailer": "^10.6.0",
