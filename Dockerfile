@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1
-FROM node:24-slim AS deps
+FROM node:26-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
 
-FROM node:24-slim
+FROM node:26-slim
 ENV NODE_ENV=production \
     DATA_DIR=/data \
     HTTP_PORT=8080 \
