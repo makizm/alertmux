@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "nodemailer": "^10.6.0",
-    "smtp-server": "^3.21.6"
+    "smtp-server": "^3.21.7"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",
