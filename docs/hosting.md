@@ -34,7 +34,9 @@ retry SMTP on 4xx and connection errors, so a short outage only delays mail.
   or a TLS-terminating TCP proxy until TLS support lands.
 - Put the admin UI behind HTTPS (reverse proxy, ALB, Container Apps HTTP ingress) and set `TRUST_PROXY=true`.
   Don't publish 8080 to the internet.
-- Set `SECRET_KEY` explicitly and back it up together with `/data`. Without it, stored credentials can't be decrypted.
+- Set `SECRET_KEY` explicitly, from a file or secret store (`.env`, `--env-file`, a Kubernetes Secret, a
+  task definition secret) rather than generating it on the command line, and back it up together with `/data`.
+  Every new container, including after an upgrade, must get the same key, or stored credentials can't be decrypted.
 
 ## Backups
 

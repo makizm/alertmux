@@ -30,8 +30,18 @@ type stripping, and the UI is plain HTML/CSS/JS.
 
 ## Install (Docker)
 
-Images for `linux/amd64` and `linux/arm64` are published to GitHub Container Registry:
-`ghcr.io/makizm/alertmux` (tags `latest`, `1`, `1.2`, `1.2.3`, and `edge` for the main branch).
+Install from the published image rather than building it yourself. Images for `linux/amd64` and
+`linux/arm64` are on GitHub Container Registry as `ghcr.io/makizm/alertmux`, with these tags:
+
+| Tag | Moves when | Use it for |
+|---|---|---|
+| `0.2` (`X.Y`) | a patch release in that line | Normal installs: you get fixes, and you choose when to move to the next minor version |
+| `0.2.0` (`X.Y.Z`) | never | Exact, reproducible deployments |
+| `latest` | every release | Trying it out. An upgrade can bring a new minor version without warning |
+| `edge` | every push to `main` | Testing unreleased changes |
+
+The examples below pin `0.2`. Check the [releases](https://github.com/makizm/alertmux/releases) for the
+newest version.
 
 **With Docker Compose** (recommended):
 
@@ -41,23 +51,34 @@ curl -fsSLO https://raw.githubusercontent.com/makizm/alertmux/main/docker-compos
 curl -fsSL https://raw.githubusercontent.com/makizm/alertmux/main/.env.example -o .env
 ```
 
-Edit `.env`: set `ADMIN_PASSWORD`, and set `SECRET_KEY` to the output of `openssl rand -base64 32`. Then start it:
+Set `ADMIN_PASSWORD` in `.env`, then write a random `SECRET_KEY` into it:
+
+```bash
+sed -i.bak "s|^SECRET_KEY=.*|SECRET_KEY=$(openssl rand -base64 32)|" .env && rm .env.bak
+```
+
+The key stays in `.env`, so every later restart and upgrade reuses it. Start the relay:
 
 ```bash
 docker compose up -d
 ```
 
-**With plain Docker:**
+**With plain Docker:** write the settings to an env file first, so the key is saved before the
+container starts and you can pass the same file again when you upgrade:
 
 ```bash
-docker run -d --name alertmux --restart unless-stopped \
-  -e ADMIN_PASSWORD='a-long-admin-password' -e SECRET_KEY="$(openssl rand -base64 32)" \
-  -p 25:25 -p 8080:8080 -v alertmux-data:/data \
-  ghcr.io/makizm/alertmux:latest
+umask 077 && printf 'ADMIN_PASSWORD=%s\nSECRET_KEY=%s\n' 'a-long-admin-password' "$(openssl rand -base64 32)" > alertmux.env
 ```
 
-With `docker run`, save the `SECRET_KEY` you used: without it, the stored credentials can't be decrypted
-after you recreate the container.
+```bash
+docker run -d --name alertmux --restart unless-stopped --env-file alertmux.env \
+  -p 25:25 -p 8080:8080 -v alertmux-data:/data \
+  ghcr.io/makizm/alertmux:0.2
+```
+
+Don't generate the key inline (`-e SECRET_KEY="$(openssl rand -base64 32)"`): the key is then stored
+only inside that container, and you lose it when you remove the container to upgrade. Keep
+`alertmux.env` and back it up along with the volume.
 
 **First steps**
 
@@ -67,9 +88,46 @@ after you recreate the container.
 4. Point devices at `<host>:25`, with no TLS and no auth (or a relay user if you require AUTH).
 5. Use **Test send** to verify, then watch **Messages**.
 
-**Upgrading:** `docker compose pull && docker compose up -d`. Settings, credentials and queued mail live in
-the `/data` volume and are kept. Pin a version (for example `RELAY_IMAGE=ghcr.io/makizm/alertmux:1.0`
-in `.env`) to choose when upgrades happen.
+**Upgrading.** Settings, credentials and queued mail live in the `/data` volume and are kept, as long as
+the new container gets the same `SECRET_KEY`.
+
+- **Patch releases** (for example `0.2.0` to `0.2.1`) arrive on the same pinned tag; pull and recreate.
+- **A new minor version** (for example `0.2` to `0.3`): read its release notes, then change the tag.
+
+With Compose, set the tag in `RELAY_IMAGE` in `.env` if it's changing, then run:
+
+```bash
+docker compose pull && docker compose up -d
+```
+
+Don't add `-v` to `docker compose down`: that deletes the volume.
+
+With plain Docker, pull the image, then remove and recreate the container with the same `--env-file` and
+volume (change `0.2` in both commands when you move to a new minor version):
+
+```bash
+docker pull ghcr.io/makizm/alertmux:0.2
+```
+```bash
+docker stop alertmux && docker rm alertmux
+```
+```bash
+docker run -d --name alertmux --restart unless-stopped --env-file alertmux.env \
+  -p 25:25 -p 8080:8080 -v alertmux-data:/data \
+  ghcr.io/makizm/alertmux:0.2
+```
+
+**Started with an inline key?** If you ran the older instructions with
+`-e SECRET_KEY="$(openssl rand -base64 32)"`, copy the key out of the running container **before** you
+remove it, and save it to `alertmux.env`:
+
+```bash
+docker inspect alertmux --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E '^(ADMIN_PASSWORD|SECRET_KEY)=' > alertmux.env && chmod 600 alertmux.env
+```
+
+Then upgrade as above. If the old container is already gone, the settings are still in the volume but the
+stored client secrets and keys can't be decrypted: start with a new key and re-enter them under
+**Destinations & routing**.
 
 **From source:** clone the repo, `cp .env.example .env`, then `docker compose up -d --build`.
 
@@ -162,7 +220,7 @@ git push origin v1.0.0
 
 The first time, make the package public: GitHub › your profile or organization › **Packages** › `alertmux` ›
 **Package settings** › **Change visibility** › Public. Images carry SBOM and build-provenance attestations
-(`gh attestation verify oci://ghcr.io/makizm/alertmux:1.0.0 --owner makizm`).
+(`gh attestation verify oci://ghcr.io/makizm/alertmux:0.2.0 --owner makizm`).
 
 Layout: `src/smtp` (listener) · `src/relay` (policy, routing, queue, MIME) · `src/destinations`
 (Microsoft, Google, Teams, Slack) · `src/http` (router, auth, JSON API, SSE) · `public` (UI) · `test`.

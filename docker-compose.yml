@@ -1,9 +1,9 @@
-# Install:  docker compose up -d          (pulls the published image)
-# Upgrade:  docker compose pull && docker compose up -d
+# Install:  docker compose up -d          (pulls the published image set in RELAY_IMAGE in .env)
+# Upgrade:  docker compose pull && docker compose up -d   (change the tag in RELAY_IMAGE for a new minor version)
 # Source:   docker compose up -d --build  (builds this checkout instead)
 services:
   relay:
-    image: ${RELAY_IMAGE:-ghcr.io/makizm/alertmux:latest}
+    image: ${RELAY_IMAGE:-ghcr.io/makizm/alertmux:0.2}
     build: .
     restart: unless-stopped
     env_file: .env
