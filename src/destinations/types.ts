@@ -23,7 +23,8 @@ export interface Destination {
   /** Largest raw message this destination accepts, in bytes. */
   readonly maxMessageBytes: number;
   deliver(envelope: Envelope, mime: Buffer): Promise<DeliveryResult>;
-  test(opts: { address?: string }): Promise<TestResult>;
+  /** `address`: mailbox to check or send as. `to`: if set (mail destinations that support it), send a real test message there. */
+  test(opts: { address?: string; to?: string }): Promise<TestResult>;
 }
 
 export function errorDetail(e: unknown): string {

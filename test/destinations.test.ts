@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { SMTPServer } from 'smtp-server';
 import type { DestinationRecord } from '../src/db.ts';
-import { MicrosoftGraphDestination, MICROSOFT_CLOUDS, type MicrosoftCloud } from '../src/destinations/microsoft.ts';
+import { MicrosoftGraphDestination, MICROSOFT_CLOUDS, validateMicrosoftConfig, type MicrosoftCloud } from '../src/destinations/microsoft.ts';
 import { GoogleSmtpDestination } from '../src/destinations/google.ts';
 
 const MIME = Buffer.from('From: a@contoso.com\r\nTo: b@contoso.com\r\nSubject: t\r\n\r\nhi\r\n');
@@ -85,6 +85,45 @@ test('microsoft: bad client secret is a permanent failure; network error is a re
   const down = (async () => { throw new TypeError('fetch failed'); }) as typeof fetch;
   const d2 = new MicrosoftGraphDestination(record('microsoft-graph', { cloud: 'global', tenantId: 't', clientId: 'c', authMethod: 'secret' }, { clientSecret: 'x' }), down);
   assert.equal((await d2.deliver({ from: 'a@b.c', to: ['x@y.z'] }, MIME)).kind, 'retry');
+});
+
+test('microsoft: send-as override sends from that mailbox and rewrites From (original → Reply-To)', async () => {
+  const { f, calls } = fakeFetch((url) => (url.includes('/oauth2/') ? tokenOk() : new Response(null, { status: 202 })));
+  const d = new MicrosoftGraphDestination(record('microsoft-graph', { cloud: 'global', tenantId: 't', clientId: 'c', authMethod: 'secret', sendAs: 'alerts@contoso.com' }, { clientSecret: 's' }), f);
+  const r = await d.deliver({ from: 'a@contoso.com', to: ['b@contoso.com'] }, MIME);
+  assert.equal(r.kind, 'ok');
+  const send = calls.find((c) => c.url.endsWith('/sendMail'))!;
+  assert.equal(send.url, 'https://graph.microsoft.com/v1.0/users/alerts%40contoso.com/sendMail');
+  const sent = Buffer.from(String(send.init.body), 'base64').toString();
+  assert.match(sent, /^From: alerts@contoso\.com\r$/m);
+  assert.match(sent, /^Reply-To: a@contoso\.com\r$/m);
+  assert.doesNotMatch(sent, /^From: a@contoso\.com/m);
+});
+
+test('microsoft: test with To sends a real message from the send-as (or given) mailbox', async () => {
+  const { f, calls } = fakeFetch((url) => (url.includes('/oauth2/') ? tokenOk() : new Response(null, { status: 202, headers: { 'request-id': 'rid-1' } })));
+  const plain = new MicrosoftGraphDestination(record('microsoft-graph', { cloud: 'global', tenantId: 't', clientId: 'c', authMethod: 'secret' }, { clientSecret: 's' }), f);
+  const missing = await plain.test({ to: 'ops@contoso.com' });
+  assert.equal(missing.ok, false);
+  assert.match(missing.detail, /Enter the From mailbox/);
+
+  const r1 = await plain.test({ address: 'me@contoso.com', to: 'ops@contoso.com' });
+  assert.equal(r1.ok, true);
+  assert.match(r1.detail, /sent from me@contoso\.com to ops@contoso\.com \(request-id rid-1\)/);
+  const sent = Buffer.from(String(calls.at(-1)!.init.body), 'base64').toString();
+  assert.equal(calls.at(-1)!.url, 'https://graph.microsoft.com/v1.0/users/me%40contoso.com/sendMail');
+  assert.match(sent, /^To: ops@contoso\.com\r$/m);
+
+  const over = new MicrosoftGraphDestination(record('microsoft-graph', { cloud: 'global', tenantId: 't', clientId: 'c', authMethod: 'secret', sendAs: 'alerts@contoso.com' }, { clientSecret: 's' }), f);
+  const r2 = await over.test({ to: 'ops@contoso.com' });
+  assert.equal(r2.ok, true);
+  assert.match(r2.detail, /sent from alerts@contoso\.com to ops@contoso\.com/);
+  assert.equal(calls.at(-1)!.url, 'https://graph.microsoft.com/v1.0/users/alerts%40contoso.com/sendMail');
+});
+
+test('microsoft: invalid send-as mailbox is rejected by validation', () => {
+  assert.deepEqual(validateMicrosoftConfig({ cloud: 'global', tenantId: 't', clientId: 'c', authMethod: 'secret', sendAs: 'not-an-email' }, { clientSecret: 's' }, {}), ['Send-as mailbox must be an email address']);
+  assert.deepEqual(validateMicrosoftConfig({ cloud: 'global', tenantId: 't', clientId: 'c', authMethod: 'secret', sendAs: '' }, { clientSecret: 's' }, {}), []);
 });
 
 test('microsoft: oversized messages fail permanently without calling Graph', async () => {

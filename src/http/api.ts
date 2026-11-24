@@ -33,6 +33,7 @@ function sanitizeConfig(kind: DestinationKind, c: Record<string, unknown>): Reco
     return {
       cloud: str(c.cloud) || 'global', authorityUrl: str(c.authorityUrl), graphUrl: str(c.graphUrl),
       tenantId: str(c.tenantId), clientId: str(c.clientId), authMethod: c.authMethod === 'certificate' ? 'certificate' : 'secret',
+      sendAs: str(c.sendAs, 254),
     };
   }
   if (kind === 'teams-webhook' || kind === 'slack') {
@@ -139,7 +140,16 @@ export function apiRoutes(router: Router, { store, registry, relay, listener }: 
     const dest = registry.get(ctx.params.id!);
     if (!dest) throw new HttpError(404, 'Destination not found');
     const body = await ctx.json();
-    const result = await dest.test({ address: str(body.address) || undefined });
+    // mode 'access' checks credentials only; mode 'send' sends a real test message (Microsoft 365).
+    const send = body.mode === 'send';
+    const address = str(body.address) || undefined;
+    const to = send ? str(body.to) || undefined : undefined;
+    if (send && dest.record.kind !== 'microsoft-graph') throw new HttpError(400, 'This destination type does not support sending a test message here; use Test send');
+    if (send && !to) throw new HttpError(400, 'Enter the To address');
+    for (const [label, v] of [['Mailbox', address], ['To', to]] as const) {
+      if (v && !/^[^@\s]+@[^@\s]+$/.test(v)) throw new HttpError(400, `${label} must be an email address`);
+    }
+    const result = await dest.test({ address, to });
     store.addEvent(result.ok ? 'info' : 'warn', 'destination.test', `Test of "${dest.record.name}": ${result.detail}`);
     return result;
   });

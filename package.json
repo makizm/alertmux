@@ -1,6 +1,6 @@
 {
   "name": "alertmux",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "license": "Apache-2.0",
   "description": "Alertmux: an SMTP relay that routes device alerts and delivers via Microsoft Graph and Google Workspace using OAuth2, with a minimal admin web UI.",

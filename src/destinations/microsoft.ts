@@ -1,5 +1,6 @@
 import type { DestinationRecord } from '../db.ts';
-import { extractAddresses, getHeader, parseHeaders, rewriteHeaders, splitMessage } from '../relay/mime.ts';
+import { buildTextMessage, extractAddresses, getHeader, parseHeaders, rewriteHeaders, splitMessage } from '../relay/mime.ts';
+import { rewriteFrom } from '../relay/policy.ts';
 import { entraClientAssertion } from './jwt.ts';
 import { errorDetail, type DeliveryResult, type Destination, type Envelope, type TestResult } from './types.ts';
 
@@ -21,7 +22,15 @@ export interface MicrosoftConfig {
   tenantId: string;
   clientId: string;
   authMethod: 'secret' | 'certificate';
+  /**
+   * Optional sender override. When set, every message through this destination is sent from this mailbox
+   * (Graph `/users/{sendAs}/sendMail`) and the From header is rewritten to it, with the original From kept in
+   * Reply-To. Exchange Online rejects a From the app's mailbox has no Send As rights on (ErrorSendAsDenied).
+   */
+  sendAs?: string;
 }
+
+const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 /**
  * Graph limits the sendMail request to 4 MB; MIME is sent base64-encoded (+33%), so the raw message must stay
@@ -39,6 +48,7 @@ export function validateMicrosoftConfig(c: Partial<MicrosoftConfig>, secrets: Re
   }
   if (!c.tenantId?.trim()) errors.push('Tenant ID is required');
   if (!c.clientId?.trim()) errors.push('Client (application) ID is required');
+  if (c.sendAs?.trim() && !EMAIL.test(c.sendAs.trim())) errors.push('Send-as mailbox must be an email address');
   const has = (k: string) => (secrets[k] ?? '') !== '' ? secrets[k] !== null : !!existingSecrets[k];
   if (c.authMethod === 'certificate') {
     if (!has('certificatePem')) errors.push('Certificate (PEM) is required');
@@ -96,6 +106,9 @@ export class MicrosoftGraphDestination implements Destination {
 
   get endpoints() { return endpoints(this.#config); }
 
+  /** The configured sender override, or '' to send as the envelope sender. */
+  get sendAs(): string { return this.#config.sendAs?.trim() ?? ''; }
+
   /** Client-credentials token, cached until 5 minutes before expiry; concurrent callers share one request. */
   async token(force = false): Promise<string> {
     if (!force && this.#token && this.#token.expiresAt - 300_000 > Date.now()) return this.#token.value;
@@ -129,8 +142,10 @@ export class MicrosoftGraphDestination implements Destination {
     if (mime.length > this.maxMessageBytes) {
       return { kind: 'permanent', code: 'size', detail: `Message is ${mime.length} bytes; Graph sendMail accepts at most ${this.maxMessageBytes}` };
     }
-    const payload = addEnvelopeBcc(mime, envelope.to).toString('base64');
-    const url = `${this.endpoints.graph}/v1.0/users/${encodeURIComponent(envelope.from)}/sendMail`;
+    const from = this.sendAs || envelope.from;
+    const body = this.sendAs ? rewriteFrom(mime, this.sendAs) : mime;
+    const payload = addEnvelopeBcc(body, envelope.to).toString('base64');
+    const url = `${this.endpoints.graph}/v1.0/users/${encodeURIComponent(from)}/sendMail`;
 
     for (let attempt = 0; attempt < 2; attempt++) {
       let token: string;
@@ -173,23 +188,41 @@ export class MicrosoftGraphDestination implements Destination {
     return { kind: 'retry', code: '401', detail: 'Unauthorized after token refresh' };
   }
 
-  async test({ address }: { address?: string }): Promise<TestResult> {
+  async test({ address, to }: { address?: string; to?: string }): Promise<TestResult> {
     try {
       await this.token(true);
     } catch (e) {
       return { ok: false, detail: errorDetail(e) };
     }
-    if (!address) return { ok: true, detail: `Got an access token for ${this.endpoints.scope}.` };
+    if (to) return this.#sendTest(address, to);
+    address ||= this.sendAs || undefined;
+    const untested = 'Sending was not tested; use “Send a test message” to confirm Mail.Send and the sender mailbox.';
+    if (!address) return { ok: true, detail: `Sign-in OK: got an access token for ${this.endpoints.scope}. ${untested}` };
     // Optional mailbox check: needs User.Read.All or Mail.Send scope coverage; a 403 here is informative, not fatal.
     try {
       const res = await this.#fetch(`${this.endpoints.graph}/v1.0/users/${encodeURIComponent(address)}?$select=id,mail`, {
         headers: { authorization: `Bearer ${await this.token()}` }, signal: AbortSignal.timeout(30_000),
       });
-      if (res.ok) return { ok: true, detail: `Token OK and mailbox ${address} exists.` };
-      if (res.status === 403) return { ok: true, detail: `Token OK. Mailbox lookup not permitted (needs User.Read.All) — send a test message to confirm ${address}.` };
-      return { ok: false, detail: `Token OK, but mailbox lookup for ${address} returned ${res.status}.` };
+      if (res.ok) return { ok: true, detail: `Sign-in OK and mailbox ${address} exists. ${untested}` };
+      if (res.status === 403) return { ok: true, detail: `Sign-in OK. Mailbox lookup for ${address} skipped: the app lacks User.Read.All. ${untested}` };
+      return { ok: false, detail: `Sign-in OK, but mailbox lookup for ${address} returned ${res.status}.` };
     } catch (e) {
       return { ok: false, detail: errorDetail(e) };
     }
+  }
+
+  /** Send a real test message through Graph so the admin can see who receives it and from which mailbox. */
+  async #sendTest(address: string | undefined, to: string): Promise<TestResult> {
+    const from = this.sendAs || address;
+    if (!from) return { ok: false, detail: 'Enter the From mailbox, or set Send as mailbox on this destination.' };
+    const hostname = from.slice(from.lastIndexOf('@') + 1);
+    const mime = buildTextMessage({
+      from, to: [to], subject: `Alertmux test: ${this.record.name}`, hostname,
+      text: `Test message from Alertmux destination "${this.record.name}", sent as ${from} through Microsoft Graph.`,
+    });
+    const r = await this.deliver({ from, to: [to] }, mime);
+    const via = this.sendAs && address && address.toLowerCase() !== this.sendAs.toLowerCase() ? ` (send-as override; ${address} ignored)` : '';
+    if (r.kind === 'ok') return { ok: true, detail: `Sign-in OK. Test message sent from ${from}${via} to ${to}${r.upstreamId ? ` (request-id ${r.upstreamId})` : ''}.` };
+    return { ok: false, detail: `Sign-in OK, but sending from ${from}${via} to ${to} failed: ${r.code}: ${r.detail}` };
   }
 }

@@ -88,6 +88,11 @@
             <label for="d-key">Private key (PEM, unencrypted)</label>
             <textarea id="d-key" name="secrets.privateKeyPem" data-secret placeholder="-----BEGIN PRIVATE KEY-----"></textarea>
           </div>
+          <label for="d-sendas">Send as mailbox (optional)</label>
+          <input type="email" id="d-sendas" name="config.sendAs" placeholder="alerts@contoso.com">
+          <div class="hint">Overrides the sender for everything delivered here. The From header is rewritten to this mailbox
+            (original sender kept in Reply-To), because Exchange Online only lets the app send as mailboxes it has rights on.
+            Leave blank to send as the device's MAIL FROM (or the fixed sender in Settings).</div>
           <div class="callout">The app needs the <strong>Mail.Send</strong> application permission with admin consent.
             Restrict which mailboxes it can send as with Exchange RBAC for Applications. See <code>docs/entra.md</code>.</div>
         </div>
@@ -185,18 +190,44 @@
   </dialog>
 
   <dialog id="test" aria-labelledby="test-title">
-    <form id="test-form" method="dialog">
-      <header><h2 id="test-title">Test connection</h2><button type="button" class="small" data-close aria-label="Close">✕</button></header>
-      <div class="body">
+    <header><h2 id="test-title">Test connection</h2><button type="button" class="small" data-close aria-label="Close">✕</button></header>
+    <div class="body">
+      <!-- Google and chat destinations: one test. -->
+      <form id="test-form" method="dialog">
         <div id="test-addr-box">
-          <label for="t-addr">Mailbox address (optional for Microsoft, required for Google XOAUTH2)</label>
+          <label for="t-addr">Mailbox address (required for Google XOAUTH2)</label>
           <input type="email" id="t-addr" name="address" placeholder="sender@example.com">
         </div>
         <p id="test-chat-note" class="hint hidden">Posts a visible test message to the channel.</p>
-        <div id="test-result" class="hidden"></div>
         <div class="row end mt"><button type="submit" class="primary">Run test</button></div>
+      </form>
+
+      <!-- Microsoft 365: checking access and sending mail are separate tests. -->
+      <div id="test-ms" class="hidden">
+        <form id="ms-access-form" method="dialog">
+          <h3>1. Check access</h3>
+          <p class="hint">Signs in with this destination's tenant, client ID and secret or certificate, and gets a Microsoft Graph token.
+            If you enter a mailbox, also looks it up (needs User.Read.All; without it the lookup is skipped).
+            <strong>Sends nothing</strong>, so it does not prove the app may send as a mailbox.</p>
+          <label for="t-lookup">Mailbox to look up (optional)</label>
+          <input type="email" id="t-lookup" name="address" placeholder="alerts@example.com">
+          <div class="row end mt"><button type="submit">Check access</button></div>
+        </form>
+        <form id="ms-send-form" method="dialog">
+          <h3>2. Send a test message</h3>
+          <p class="hint">Sends a real email through Graph <code>sendMail</code>. This confirms the Mail.Send permission and that the app may
+            send as the From mailbox (Exchange RBAC scope).</p>
+          <label for="t-from">From</label>
+          <input type="email" id="t-from" name="from" required placeholder="alerts@example.com">
+          <div class="hint hidden" id="t-sendas-note"></div>
+          <label for="t-to">To</label>
+          <input type="email" id="t-to" name="to" required placeholder="you@example.com">
+          <div class="row end mt"><button type="submit" class="primary">Send test message</button></div>
+        </form>
       </div>
-    </form>
+
+      <div id="test-result" class="hidden mt"></div>
+    </div>
   </dialog>
 </body>
 </html>

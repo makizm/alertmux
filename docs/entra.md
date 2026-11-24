@@ -66,7 +66,13 @@ from the app registration. The Exchange role assignment grants it for the scoped
 ## 4. Configure the relay
 
 **Destinations & routing › Add Microsoft 365**: pick the cloud, enter the tenant ID, client ID and secret
-(or certificate + key), then save and click **Test**.
+(or certificate + key), then save and click **Test**. The dialog has two separate tests:
+
+- **Check access** signs in and gets a Graph token (and, if you enter a mailbox, looks it up; that needs
+  `User.Read.All`). It sends nothing, so it does not prove the app may send mail.
+- **Send a test message** sends a real email from the **From** mailbox (or the destination's *Send as
+  mailbox*, if set) to the **To** address. This is the end-to-end check for `Mail.Send` and the Exchange
+  RBAC scope.
 
 ## How messages are sent
 
@@ -75,6 +81,10 @@ from the app registration. The Exchange role assignment grants it for the scoped
 - **Sender.** The message is sent from the mailbox in MAIL FROM, or from the fixed sender (Settings ›
   Sender). The `From:` header must be that mailbox, or one it has *Send As* rights on. Otherwise Graph returns
   `ErrorSendAsDenied`. In fixed mode, turn on *Rewrite the From header*.
+- **Send-as override.** Set *Send as mailbox* on the destination to send everything routed there from one
+  mailbox, whatever the device put in MAIL FROM. The `From:` header is rewritten to that mailbox and the
+  original sender is kept in `Reply-To`. Use this when devices use addresses that aren't real mailboxes in
+  the tenant.
 - **Recipients.** Graph takes recipients from the MIME headers. Envelope recipients that are missing from
   To/Cc/Bcc (blind copies some devices add) are added as `Bcc` automatically. Header recipients that
   aren't in the envelope are still delivered by Graph.

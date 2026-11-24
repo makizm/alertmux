@@ -28,10 +28,15 @@ export function checkSender(s: Settings['sender'], mailFrom: string): SenderDeci
  */
 export function applySenderRewrite(s: Settings['sender'], raw: Buffer): Buffer {
   if (s.mode !== 'fixed' || !s.rewriteFrom) return raw;
+  return rewriteFrom(raw, s.fixedAddress);
+}
+
+/** Set the From header to `address`; the original From (if different) is kept as Reply-To unless one exists. */
+export function rewriteFrom(raw: Buffer, address: string): Buffer {
   const headers = parseHeaders(splitMessage(raw).head);
   const original = getHeader(headers, 'from');
-  if (original.toLowerCase().includes(s.fixedAddress.toLowerCase())) return raw;
+  if (original.toLowerCase().includes(address.toLowerCase())) return raw;
   const add: Record<string, string> = {};
   if (original) add['Reply-To'] = original;
-  return rewriteHeaders(raw, { set: { From: s.fixedAddress }, add });
+  return rewriteHeaders(raw, { set: { From: address }, add });
 }

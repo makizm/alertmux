@@ -107,7 +107,7 @@ form.addEventListener('submit', async (e) => {
 
 function describe(d) {
   const c = d.config;
-  if (d.kind === 'microsoft-graph') return `${meta.microsoftClouds[c.cloud]?.label ?? c.cloud} · tenant ${c.tenantId} · ${c.authMethod}`;
+  if (d.kind === 'microsoft-graph') return `${meta.microsoftClouds[c.cloud]?.label ?? c.cloud} · tenant ${c.tenantId} · ${c.authMethod}${c.sendAs ? ` · sends as ${c.sendAs}` : ''}`;
   const body = c.includeBody ? `body up to ${c.maxBodyChars} chars` : 'no body';
   if (d.kind === 'teams-webhook') return `Workflows webhook · ${body}`;
   if (d.kind === 'slack') return `${c.method === 'bot' ? `Bot → ${c.channel}${c.apiBaseUrl.includes('slack-gov') ? ' (GovSlack)' : ''}` : 'Incoming webhook'} · ${body}`;
@@ -146,20 +146,39 @@ function openTest(d) {
   $('#test-title').textContent = `Test ${d.name}`;
   $('#test-result').className = 'hidden';
   const chat = meta.destinationCategories[d.kind] === 'chat';
+  const ms = d.kind === 'microsoft-graph';
+  $('#test-form').classList.toggle('hidden', ms);
+  $('#test-ms').classList.toggle('hidden', !ms);
   $('#test-addr-box').classList.toggle('hidden', chat);
   $('#test-chat-note').classList.toggle('hidden', !chat);
+  if (ms) {
+    // With a send-as override the sender is fixed: show it and lock the field.
+    const from = $('#t-from');
+    const sendAs = d.config.sendAs || '';
+    if (sendAs || from.disabled) from.value = sendAs;
+    from.disabled = !!sendAs;
+    const note = $('#t-sendas-note');
+    note.textContent = sendAs ? 'This destination always sends as this mailbox (Send as mailbox setting).' : '';
+    note.classList.toggle('hidden', !sendAs);
+  }
   testDialog.showModal();
 }
-$('#test-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+
+async function runTest(body) {
   const box = $('#test-result');
-  box.className = 'callout';
+  box.className = 'callout mt';
   box.textContent = 'Testing…';
   try {
-    const r = await api('POST', `/api/destinations/${testingId}/test`, { address: e.target.address.value });
-    box.className = r.ok ? 'callout' : 'callout err';
+    const r = await api('POST', `/api/destinations/${testingId}/test`, body);
+    box.className = r.ok ? 'callout mt' : 'callout err mt';
     box.textContent = (r.ok ? '✓ ' : '✗ ') + r.detail;
   } catch (err) { showError(box, err); }
+}
+$('#test-form').addEventListener('submit', (e) => { e.preventDefault(); runTest({ mode: 'access', address: e.target.address.value }); });
+$('#ms-access-form').addEventListener('submit', (e) => { e.preventDefault(); runTest({ mode: 'access', address: e.target.address.value }); });
+$('#ms-send-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  runTest({ mode: 'send', address: e.target.from.disabled ? '' : e.target.from.value, to: e.target.to.value });
 });
 
 // ---- routing ----
